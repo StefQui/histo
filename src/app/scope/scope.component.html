@@ -1,0 +1,11 @@
+<h1>
+  {{scope}}
+</h1>
+<ag-grid-angular
+  style="width: 500px; height: 150px;"
+  class="ag-theme-balham"
+  [rowData]="rowData"
+  [columnDefs]="columnDefs"
+>
+</ag-grid-angular>
+<button class="btn btn-success" (click)="startHisto()">start</button>
