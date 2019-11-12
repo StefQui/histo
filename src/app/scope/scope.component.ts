@@ -1,7 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { HistoService } from '../histo.service';
-import { merge, Observable, Subscription } from 'rxjs/index';
-import { filter, map, startWith, tap } from 'rxjs/internal/operators';
+import { iif, merge, Observable, Subscription } from 'rxjs/index';
+import { filter, map, mergeMap, startWith, tap } from 'rxjs/internal/operators';
 import 'ag-grid-enterprise';
 
 @Component({
@@ -26,6 +26,7 @@ export class ScopeComponent implements OnInit {
     {headerName: 'Name', field: 'name'}
   ];
   private dataFetcher: Observable<any>;
+  private streamFetcher: Observable<any>;
   private datasource: { getRows: ((params) => any) };
   private server: any;
 
@@ -69,8 +70,19 @@ export class ScopeComponent implements OnInit {
         })
       )
     );
+    this.streamFetcher = this.histoService.histoDataStreamerSubject.asObservable().pipe(
+      filter(event => event.scope === this.scope),
+      map(() => {
+        return {
+          type: 'stream',
+          scope: this.scope
+        };
+      })
+    );
+
     this.server = this.FakeServer(this.dataFetcher, this.scope);
     this.datasource = this.ServerSideDatasource(this.server, this.scope);
+    this.server.emptyAll(true);
 
   }
 
@@ -78,8 +90,17 @@ export class ScopeComponent implements OnInit {
     this.data = [];
     this.dataIsLoaded = false;
     this.server.reset();
+    this.server.emptyAll(false);
+    this.streamFetcher.pipe(
+      filter(event => event.scope === this.scope),
+      tap(() => console.log('dataIsSTreamed', this.scope)),
+      tap(() => this.server.updateData()),
+      tap(() => this.gridApi.purgeServerSideCache())
+    ).subscribe();
+
     this.histoService.startHisto(this.scope);
     this.gridApi.purgeServerSideCache();
+    // this.gridApi.batchUpdateRowData();
   }
 
   onGridReady(params) {
@@ -101,14 +122,6 @@ export class ScopeComponent implements OnInit {
     return {
       getRows(params) {
         return fakeServer.getResponse(params, scope);
-        // setTimeout(() => {
-        //   const response = server.getResponse(params.request);
-        //   if (response.success) {
-        //     params.successCallback(response.rows, response.lastRow);
-        //   } else {
-        //     params.failCallback();
-        //   }
-        // }, 500);
       }
     };
   }
@@ -118,7 +131,17 @@ export class ScopeComponent implements OnInit {
     let data = [];
     let isFirst = true;
     let sub: Subscription;
+    let isEmpty = false;
     return {
+      updateData() {
+        const index = Math.floor( Math.random() * 15 );
+        if (data.length >= index) {
+          data[index].name = new Date();
+        }
+      },
+      emptyAll(empty: boolean) {
+        isEmpty = empty;
+      },
       reset() {
         loaded = false;
         data = [];
@@ -128,7 +151,7 @@ export class ScopeComponent implements OnInit {
         console.log('------------------asking for rows: ' + params.request.startRow + ' to ' + params.request.endRow + ' loaded=' +
           loaded + ' data.length' + data.length + ' scope=' + scope);
 
-        if (!sub) {
+        if (isEmpty) {
           params.successCallback([], 0);
         }
         if (params.request.endRow < data.length) {
@@ -150,28 +173,17 @@ export class ScopeComponent implements OnInit {
         }
         let alreadyFetched = false;
         sub = dataFetcher.pipe(
-          startWith({
-          type: 'starts',
-          scope
-        }),
-          filter(event => event.scope === scope)
-        ).subscribe((res) => {
-          console.log('datafetcher', res, params.request, alreadyFetched, scope, res.scope);
-          if (res.type === 'starts') {
-            if (isFirst) {
-              isFirst = false;
-              params.successCallback([], 0);
-              return;
+          filter(event => event.scope === scope),
+          tap( (res) => {
+            console.log('before...', res);
+            if (res.type === 'lines') {
+              data.push(...res.lines);
             } else {
-              return;
-            }
-          }
-          if (res.type === 'end') {
               loaded = true;
-          } else {
-            data.push(...res.lines);
-            console.log('push lines ', data.length, res.lines);
-          }
+            }
+          }),
+          tap((res) => console.log('datafetcher', res, params.request, alreadyFetched, scope, res.scope)),
+          ).subscribe((res) => {
           if (params.request.endRow < data.length && ! alreadyFetched) {
             const res1 = data.slice(params.request.startRow, params.request.endRow);
             console.log('**************** loaded = ', loaded);
@@ -189,22 +201,6 @@ export class ScopeComponent implements OnInit {
             return;
           }
         });
-        // this.fetcher.subscribe(() => {
-        //   if (request.endRow < this.data.length) {
-        //     const res = this.data.slice(request.startRow, request.endRow);
-        //     request.successCallback(res, dataState().dataIsLoaded ? dataState().data.length : -1);
-        //     return;
-        //   }
-        // });
-
-
-        //   const rowsThisPage = allData.slice(request.startRow, request.endRow);
-        //   const lastRow = allData.length <= request.endRow ? allData.length : -1;
-        //   return {
-        //     success: true,
-        //     rows: rowsThisPage,
-        //     lastRow
-        //   };
       }
     };
   }
