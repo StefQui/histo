@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { from, interval, of, range, Subject } from 'rxjs';
 import { fromArray } from 'rxjs/internal/observable/fromArray';
 import { map, switchMap, take } from 'rxjs/operators';
-import { mapTo } from 'rxjs/internal/operators';
+import { mapTo, tap } from 'rxjs/internal/operators';
 import { endWith } from 'rxjs/internal/operators/endWith';
 
 @Injectable({
@@ -25,16 +25,22 @@ export class HistoService {
   startHisto(scope: string) {
     console.log('start histo ', scope);
     if (!this.histoSubjectMap[scope]) {
+      console.log('creating subject ', scope);
       this.histoSubjectMap[scope] = new Subject();
       this.histoSubjectMap[scope].pipe(
         switchMap(() => this.buildData(scope).pipe(endWith('theend')))
       ).subscribe(data => {
           console.log('next', data);
           if (data === 'theend') {
-            this.histoDataCompleteSubject.next();
+            this.histoDataCompleteSubject.next({
+              scope
+            });
             return;
           }
-          this.histoDataNextSubject.next(data);
+          this.histoDataNextSubject.next({
+            data,
+            scope
+          });
         });
     }
     this.histoSubjectMap[scope].next();

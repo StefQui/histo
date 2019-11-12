@@ -1,7 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { HistoService } from '../histo.service';
 import { merge, Observable, Subscription } from 'rxjs/index';
-import { map, startWith, tap } from 'rxjs/internal/operators';
+import { filter, map, startWith, tap } from 'rxjs/internal/operators';
 import 'ag-grid-enterprise';
 
 @Component({
@@ -47,19 +47,24 @@ export class ScopeComponent implements OnInit {
     //   .subscribe((lines) => this.dataIsLoaded = true);
     this.dataFetcher = merge(
       this.histoService.histoDataNextSubject.asObservable().pipe(
-        // tap((lines) => this.data.push(lines)),
+        filter(event => event.scope === this.scope),
+        map((event) => event.data),
+        tap((lines) => console.log('lines received ', this.scope)),
         map((lines) => {
           return {
             type: 'lines',
+            scope: this.scope,
             lines
           };
         })
       ),
       this.histoService.histoDataCompleteSubject.asObservable().pipe(
         // tap(() => this.dataIsLoaded = true),
+        filter(event => event.scope === this.scope),
         map(() => {
           return {
-            type: 'end'
+            type: 'end',
+            scope: this.scope
           };
         })
       )
@@ -144,10 +149,14 @@ export class ScopeComponent implements OnInit {
           sub.unsubscribe();
         }
         let alreadyFetched = false;
-        sub = dataFetcher.pipe(startWith({
-          type: 'starts'
-        })).subscribe((res) => {
-          console.log('datafetcher', res, params.request, alreadyFetched);
+        sub = dataFetcher.pipe(
+          startWith({
+          type: 'starts',
+          scope
+        }),
+          filter(event => event.scope === scope)
+        ).subscribe((res) => {
+          console.log('datafetcher', res, params.request, alreadyFetched, scope, res.scope);
           if (res.type === 'starts') {
             if (isFirst) {
               isFirst = false;
