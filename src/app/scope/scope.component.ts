@@ -21,10 +21,7 @@ export class ScopeComponent implements OnInit {
   private data = [];
   private dataIsLoaded = false;
 
-  columnDefs = [
-    {headerName: 'Id', field: 'id'},
-    {headerName: 'Name', field: 'name'}
-  ];
+  columnDefs = [];
   private dataFetcher: Observable<any>;
   private streamFetcher: Observable<any>;
   private datasource: { getRows: ((params) => any) };
@@ -132,6 +129,7 @@ export class ScopeComponent implements OnInit {
     let isFirst = true;
     let sub: Subscription;
     let isEmpty = false;
+    let columnsAreSet = false;
     return {
       updateData() {
         const index = Math.floor( Math.random() * 15 );
@@ -149,8 +147,7 @@ export class ScopeComponent implements OnInit {
       },
       getResponse(params) {
         console.log('------------------asking for rows: ' + params.request.startRow + ' to ' + params.request.endRow + ' loaded=' +
-          loaded + ' data.length' + data.length + ' scope=' + scope);
-
+          loaded + ' data.length' + data.length + ' scope=' + scope, params);
         if (isEmpty) {
           params.successCallback([], 0);
         }
@@ -175,6 +172,13 @@ export class ScopeComponent implements OnInit {
         sub = dataFetcher.pipe(
           filter(event => event.scope === scope),
           tap( (res) => {
+            if (!columnsAreSet) {
+              params.parentNode.gridApi.setColumnDefs([
+                {headerName: 'Id', field: 'id'},
+                {headerName: 'Name2', field: 'name'}
+              ]);
+              columnsAreSet = true;
+            }
             console.log('before...', res);
             if (res.type === 'lines') {
               data.push(...res.lines);
